@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - uses: actions/checkout@v6
 
@@ -47,6 +48,7 @@ jobs:
       - name: Generate release keystore
         run: |
           mkdir -p ~/.android
+
           # Debug keystore (for assembleDebug)
           if [ ! -f ~/.android/debug.keystore ]; then
             keytool -genkey -v -keystore ~/.android/debug.keystore \
@@ -54,9 +56,11 @@ jobs:
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
+
           # Release keystore (for assembleRelease, V1+V2+V3 signed)
           # Use GitHub Secrets if available, otherwise generate a CI-only key
           cd android/app
+
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > release.keystore
             echo "storeFile=release.keystore" > keystore.properties
@@ -69,12 +73,14 @@ jobs:
               -storepass latexsnipper -alias latexsnipper -keypass latexsnipper \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=LaTeXSnipper,O=LaTeXSnipper,C=CN"
+
             echo "storeFile=release.keystore" > keystore.properties
             echo "storePassword=latexsnipper" >> keystore.properties
             echo "keyAlias=latexsnipper" >> keystore.properties
             echo "keyPassword=latexsnipper" >> keystore.properties
             echo "Using CI-generated keystore (no Secrets set)"
           fi
+
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -99,6 +105,7 @@ jobs:
         run: |
           # Auto-read version from package.json if not provided
           VERSION="${{ inputs.version }}"
+
           if [ -z "$VERSION" ]; then
             VERSION=$(node -e "console.log(require('./package.json').version)")
             echo "Using package.json version: $VERSION"
@@ -106,10 +113,13 @@ jobs:
             # Update package.json with the provided version
             node -e "const p=require('./package.json');p.version='$VERSION';require('fs').writeFileSync('package.json',JSON.stringify(p,null,2))"
           fi
+
           # Update Android version — strip dots and strip leading zeros to avoid octal
           VER_CODE=$(echo "$VERSION" | node -e "process.stdin.on('data',d=>console.log(Number(d.toString().replace(/\./g,''))))")
+
           sed -i "s/versionCode .*/versionCode $VER_CODE/" android/app/build.gradle
           sed -i "s/versionName .*/versionName \"$VERSION\"/" android/app/build.gradle
+
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Version set to $VERSION (code: $VER_CODE)"
 
@@ -132,13 +142,23 @@ jobs:
         run: |
           # With ABI splits, APK names contain architecture
           APK_DIR="android/app/build/outputs/apk/release"
+
           echo "=== APK files ==="
           ls -lh "$APK_DIR"/
+
           echo "--- Architecture-specific APKs ---"
+
           for apk in "$APK_DIR"/*.apk; do
             echo "APK: $(basename "$apk") size: $(du -sh "$apk" | cut -f1)"
             apksigner verify --verbose "$apk" 2>&1 | head -5 || true
           done
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: latexsnipper-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
 
       - name: Get version
         id: version
