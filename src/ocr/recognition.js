@@ -277,14 +277,16 @@ export async function processImage(file) {
     const mode = window.__recogMode?.() || 'formula';
     Logger.info('recog', `Mode: ${mode}, nativeModelStatus: ${JSON.stringify(window.__nativeModelStatus)}`);
 
-    const modelsReady = await checkPipelineModels(mode);
-    if (!modelsReady) {
-      const msg = t('status.noModels') || 'No local models installed. Download models in Settings or switch to External API.';
-      showError(msg);
-      setStatus('ready', msg, false);
-      return null;
-    }
     try {
+      const modelsReady = await checkPipelineModels(mode);
+
+      if (!modelsReady) {
+        const msg = t('status.noModels') || 'No local models installed. Download models in Settings or switch to External API.';
+        showError(msg);
+        setStatus('ready', msg, false);
+        return null;
+      }
+
       const base64 = await fileToBase64(file);
 
       const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
